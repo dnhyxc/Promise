@@ -374,7 +374,168 @@ setTimeout(() => { console.log(123) }, 2000);
 
 > 上面代码中，someAsyncThing() 函数产生的 Promise 对象，内部有语法错误。浏览器运行到这一行，会打印出错误提示 ReferenceError: x is not defined，但是不会退出进程，终止脚本执行，2 秒之后还是会输出 123。这就是说，Promise 内部的错误不会影响到 Promise 外部的代码，通俗的说法就是 `Promise 会吃掉错误`。
 
+7，错误被抛出 Promise 函数体外的情况。
 
+```js
+const promise = new Promise(function (resolve, reject) {
+  resolve('ok');
+  setTimeout(function () { throw new Error('test') }, 0)
+});
+promise.then(function (value) { console.log(value) });
+// ok
+// Uncaught Error: test
+```
 
+> 上面代码中，Promise 指定在下一轮“事件循环”再抛出错误。到那个时候，Promise 的运行已经结束了，所以这个错误是在 Promise 函数体外抛出的，会冒泡到最外层，成了未捕获的错误。
+
+8，Promise 对象后面最后跟 catch() 方法，这样可以处理 Promise 内部发生的错误。catch() 方法返回的还是一个 Promise 对象，因此后面可以接着调用 then() 方法。
+
+```js
+const someAsyncThing = function() {
+  return new Promise(function(resolve, reject) {
+    // 下面一行会报错，因为x没有声明
+    resolve(x + 2);
+  });
+};
+
+someAsyncThing()
+.catch(function(error) {
+  console.log('oh no', error);
+})
+.then(function() {
+  console.log('carry on');
+});
+// oh no [ReferenceError: x is not defined]
+// carry on
+```
+
+> 上面代码运行完 catch() 方法指定的回调函数，会接着运行后面那个 then() 方法指定的回调函数。如果没有报错，则会跳过 catch() 方法。
+
+```js
+Promise.resolve()
+.catch(function(error) {
+  console.log('oh no', error);
+})
+.then(function() {
+  console.log('carry on');
+});
+// carry on
+```
+
+> 上面代码因为没有报错，就直接跳过了 catch() 方法，直接执行了后面的 then() 方法。此时，要使 then() 方法里面报错，就与前面的 catch() 无关了。
+
+9，catch() 方法中，还能再抛出错误。
+
+```js
+const someAsyncThing = function() {
+  return new Promise(function(resolve, reject) {
+    // 下面一行会报错，因为x没有声明
+    resolve(x + 2);
+  });
+};
+
+someAsyncThing().then(function() {
+  return someOtherAsyncThing();
+}).catch(function(error) {
+  console.log('oh no', error);
+  // 下面一行会报错，因为 y 没有声明
+  y + 2;
+}).then(function() {
+  console.log('carry on');
+});
+// oh no [ReferenceError: x is not defined]
+```
+
+> 上面代码中，catch() 方法抛出一个错误，因为后面没有别的 catch() 方法了，导致这个错误不会被捕获，也不会传递到外层，如果改写一下，结果就会不一样了。
+
+```js
+someAsyncThing().then(function() {
+  return someOtherAsyncThing();
+}).catch(function(error) {
+  console.log('oh no', error);
+  // 下面一行会报错，因为y没有声明
+  y + 2;
+}).catch(function(error) {
+  console.log('carry on', error);
+});
+// oh no [ReferenceError: x is not defined]
+// carry on [ReferenceError: y is not defined]
+```
+
+> 上面代码中，第二个 catch() 方法用来捕获前一个 catch() 方法抛出的错误。
+
+### Promise.prototype.finally()
+
+1，finally() 方法用于指定不管 Promise 对象最后的状态如何，都会执行的操作。该方法是 ES2018 引入标准的。
+
+```js
+promise
+.then(result => {···})
+.catch(error => {···})
+.finally(() => {···});
+```
+
+> 上面代码中，不管 promise 最后的状态，在执行完 then() 或 catch() 指定的回调函数以后，都会执行 finally 方法指定的回调函数。
+
+2，服务器使用 Promise 处理请求，然后使用 finally 方法关掉服务器。
+
+```js
+server.listen(port)
+  .then(function () {
+    // ...
+  })
+  .finally(server.stop);
+```
+
+> finally() 方法的回调函数不接受任何参数，这意味着没有办法知道，前面的 Promise 状态到底是 resolved 还是 rejected。这表明，finally() 方法里面的操作，应该是与状态无关的，不依赖于 Promise 的执行结果。
+
+3，finally() 本质上是 then() 方法的特例。
+
+```js
+promise
+.finally(() => {
+  // ...
+});
+
+// 等同于
+promise
+.then(
+  result => {
+    // ...
+    return result;
+  },
+  error => {
+    // ...
+    throw error;
+  }
+);
+```
+
+> 上面代码中，如果不使用 finally() 方法，同样的语句需要为成功和失败两种情况各写一次。有了 finally() 方法，则只需写一次即可。
+
+```js
+Promise.prototype.finally = function (callback) {
+  let P = this.constructor;
+  return this.then(
+    value  => P.resolve(callback()).then(() => value),
+    reason => P.resolve(callback()).then(() => { throw reason })
+  );
+};
+```
+
+> 上面代码中，不管前面的 Promise 是 resolved 还是 rejected，都会执行回调函数 callback。
+
+4，finally() 方法总是会返回原来的值。
+
+```js
+// resolve 的值是 undefined
+Promise.resolve(2).then(() => {}, () => {})
+// resolve 的值是 2
+Promise.resolve(2).finally(() => {})
+// reject 的值是 undefined
+Promise.reject(3).then(() => {}, () => {})
+// reject 的值是 3
+Promise.reject(3).finally(() => {})
+```
 
 
