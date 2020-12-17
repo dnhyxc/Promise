@@ -538,4 +538,120 @@ Promise.reject(3).then(() => {}, () => {})
 Promise.reject(3).finally(() => {})
 ```
 
+### Promise.all()
 
+1，Promise.all() 方法用于将多个 Promise 实例，包装成一个新的 Promise 实例。
+
+```js
+const p = Promise.all([p1, p2, p3]);
+
+p.then((data) => {
+  console.log(data, '成功了，返回值是一个数组');
+}).catch((error) => {
+  console.log(error, '失败了，是第一个失败的 rejected 的值');
+})
+```
+
+> 上面代码中，Promise.all() 方法接受一个数组作为参数，p1、p2、p3 都是 Promise 实例，如果不是，就会调用 Promise.resolve() 方法，将参数转为 Promise 实例，再进一步处理。此外，`Promise.all() 方法的参数可以不是数组，但必须具有 Iterator 接口，且返回的每个成员都是 Promise 实例`。
+
+**说明**：上述代码 p 的状态由 p1、p2、p3 的状态决定，其中可分为两种情况：
+
+(1)，只有 p1、p2、p3 的状态都变成 rejected 时，p 的状态才会变成 rejected。此时，`p1、p2、p3 的返回值将会组成一个数组`，传递给 p 的回调函数。
+
+(2)，只要 p1、p2、p3 之中有一个被 rejected，p 的状态就变成 rejected，此时`第一个被 rejected 的实例的返回值会传递给 p 的回调函数`。
+
+```js
+// 生成一个Promise对象的数组
+const promises = [2, 3, 5, 7, 11, 13].map(function (id) {
+  return getJSON('/post/' + id + ".json");
+});
+
+Promise.all(promises).then(function (posts) {
+  // ...
+}).catch(function(reason){
+  // ...
+});
+```
+
+> 上面代码中，promises 是包含 6 个 Promise 实例的数组，只有这 6 个实例的状态都变成 resolved，才会调用 Promise.all() 方法后面的回调函数。
+
+```js
+const databasePromise = connectDatabase();
+
+const booksPromise = databasePromise
+  .then(findAllBooks);
+
+const userPromise = databasePromise
+  .then(getCurrentUser);
+
+Promise.all([
+  booksPromise,
+  userPromise
+])
+.then(([books, user]) => pickTopRecommendations(books, user));
+```
+
+> 上面代码中，booksPromise 和 userPromise 是两个异步操作，只有等它们的结果都返回了，才会触发 pickTopRecommendations 这个回调函数。
+
+2，如果作为参数的 Promise 实例，自己定义了 catch() 方法，那么它一旦被 rejected，并不会触发 Promise.all() 的 catch() 方法。
+
+```js
+const p11 = new Promise((resolve, rejected) => {
+  resolve('成功了');
+}).then(res => res).catch(e => e);
+
+const p22 = new Promise((resolve, rejected) => {
+  throw new Error('报错了');
+}).then(res => res).catch(e => e);
+
+p22.then(e => console.log(e));  // Error: 报错了
+
+Promise.all([p11, p22]).then(res => console.log(res)).catch(e => console.log(e));
+// ['成功了', Error: 报错了]
+```
+
+> 上面代码中，p1 会 resolved，p2 首先会 rejected，但是 p2 有自己的 catch() 方法，`该方法返回的是一个新的 Promise 实例，p2 指向的实际是这个新的 Promise 实例。该实例执行完 catch() 方法后，也会变成 resolved`，导致 Promise.all() 方法的参数里面的两个实例都会 resolved，因此会调用 then() 方法指定的回调函数，而不会调用 catch() 方法指定的回调函数。如果 p2 没有自己的 catch() 方法，就会调用 Promise.add() 的 catch() 方法。
+
+```js
+const p11 = new Promise((resolve, rejected) => {
+  resolve('成功了');
+}).then(res => res).catch(e => e);
+
+const p22 = new Promise((resolve, rejected) => {
+  throw new Error('报错了');
+}).then(res => res);
+
+Promise.all([p11, p22]).then(res => console.log(res)).catch(e => console.log(e));
+// Error: 报错了
+```
+
+### Promise.race()
+
+1，Promise.race() 方法同样是将多个 Promise 实例，包装成一个新的 Promise 实例。它将返回最先执行完成的实例的返回值，不管实例成功还是失败，都是返回第一个执行完成的实例的返回值。
+
+```js
+const p = Promise.race([p1, p2, p3]);
+
+p.then((d) => {
+  console.log(p + 'p1, p2, p3其中最先调用的返回值');
+})
+```
+
+> 上面代码中，只要 p1、p2、p3 之中有一个实例率先改变状态，p 的状态就是这个率先改变的实例的状态。这个率先改变的 Promise 实例的返回值，就传递给 p 的回调函数。
+
+2，Promise.race() 方法的参数于 Promise.all() 方法一样，如果不是 Promise 实例，就会先调用 Promise.resolve() 方法，将参数转为 Promise 实例，再进一步处理。
+
+```js
+const p = Promise.race([
+  fetch('/resource-that-may-take-a-while'),
+  new Promise(function (resolve, reject) {
+    setTimeout(() => reject(new Error('request timeout')), 5000)
+  })
+]);
+
+p
+.then(console.log)
+.catch(console.error);
+```
+
+> 上面代码中，如果 5 秒之内 fatch() 方法无法返回结果，变量 p 的状态就会变成 rejected，从而触发 catch() 方法指定的回调函数。

@@ -100,3 +100,40 @@ new Promise((resolve, reject) => {
 });
 // 2
 // 1
+
+
+const p = new Promise((resolve, reject) => {
+  setTimeout(() => {
+    reject(1 + '成功了~~~');
+  }, 1000);
+});
+
+const newP = p.then(
+  () => {
+    console.log('没有执行');
+  },
+  (d) => {
+    console.log(d);
+    return (2222 + d);
+  }).then((d) => {
+    console.log(d)
+    return d;
+  })
+
+newP.then((d) => {
+  console.log(d + 'newppppppppppp');
+})
+
+
+const p11 = new Promise((resolve, rejected) => {
+  resolve('成功了');
+}).then(res => res).catch(e => e);
+
+const p22 = new Promise((resolve, rejected) => {
+  throw new Error('报错了');
+}).then(res => res).catch(e => e);
+
+p22.then(e => console.log(e));  // Error: 报错了
+
+Promise.all([p11, p22]).then(res => console.log(res)).catch(e => console.log(e));
+// ['成功了', Error: 报错了]
