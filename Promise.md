@@ -840,3 +840,62 @@ p.then(function (s) => {
 ```
 
 > 上面代码生成一个新的 Promise 对象的实例 p。由于字符串 hello 不属于异步操作（判断方法是字符串对象不具有 then() 方法），返回 Promise 实例的状态从一生成就是 resolved，所以回调函数会立即执行。Promise.resolve() 方法的参数，会同时传给回调函数。
+
+`<4>，不带任何参数`
+
+> Promise.resolve() 方法允许调用时不带参数，直接返回一个 resolved 状态的 Promise 对象。所以，如果希望得到一个 Promise 对象，比较方便的方法就是直接调用 Promise.resolve() 方法。
+
+```js
+const p = Promise.resolve();
+p.then(function () {
+  // ...
+})
+```
+
+> 上面代码的变量 p 就是一个 Promise 对象。
+
+4，**注意**：立即 resolve() 的 Promise 对象，是在本轮`事件循环（event loop）的结束时执行`，而不是在下一轮事件循环的开始时执行。
+
+```js
+setTimeout(() => {
+  console.log('three');
+}, 0);
+
+Promise.resolve().then(() => {
+  console.log('two');
+})
+
+console.log('one');
+
+// one => two => three
+```
+
+> 上面代码中，`setTimeout(fn, 0) 在下一轮事件循环开始时执行`，Promise.resolve() 在本轮事件循环结束时执行，console.log('one') 则是立即执行，因此最先输出。
+
+### Promise.reject()
+
+1，Promise.reject(reason) 方法也会返回一个新的 Promise 实例，该实例的状态为 rejected。
+
+```js
+const p = Promise.reject('出错了');
+// 等价于
+const p = new Promise((resolve, reject) => reject('出错了'));
+
+p.then(null, function (s) {
+  console.log(s); // 出错了
+})
+```
+
+> 上面代码生成一个 Promise 对象的实例 p，状态为 rejected，回调函数会立即执行。
+
+2，Promise.reject() 方法的参数，会原封不动的作为 reject 的理由，变成后续方法的参数。
+
+```js
+Promise.reject('出大问题了');
+.catch(e => {
+  console.log(e === '出错了');  // true
+})
+```
+
+> 上面代码中，Promise.reject() 方法的参数是一个字符串，后面 catch() 方法的参数 e 就是这个字符串。
+
