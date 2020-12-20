@@ -899,3 +899,19 @@ Promise.reject('出大问题了');
 
 > 上面代码中，Promise.reject() 方法的参数是一个字符串，后面 catch() 方法的参数 e 就是这个字符串。
 
+## Promise 的应用
+
+### 加载图片
+
+1，我们可以将图片的加载写成一个 Promise，一旦加载完成，Promise 的状态就发生变化。
+
+```js
+const loadImage = function (path) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = resolve;
+    image.onerror = reject;
+    image.src = path;
+  });
+};   
+```
