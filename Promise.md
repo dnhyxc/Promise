@@ -1,5 +1,7 @@
 ## Promise
 
+---
+
 ### Promise 的含义
 
 1，Promise 是异步编程的一种解决方案，比传统的解决方案（回调函数和事件）更合理、更强大。
@@ -893,7 +895,7 @@ p.then(null, function (s) {
 ```js
 Promise.reject('出大问题了');
 .catch(e => {
-  console.log(e === '出错了');  // true
+  console.log(e === '出大问题了');  // true
 })
 ```
 
@@ -914,4 +916,377 @@ const loadImage = function (path) {
     image.src = path;
   });
 };   
+```
+
+### Generator 函数与 Promise 相结合
+
+1，使用 Generator 函数管理流程，遇到异步操作的时候，通常返回一个 Promise 对象。
+
+```js
+function getFoo () {
+  return new Promise((resolve, reject) => {
+    resolve('foo');
+  })
+}
+
+const g = function* () {
+  try {
+    const foo = yield getFoo();
+    console.log(foo);
+  } catch (e) {
+    console.log(e);
+  }
+}
+
+function run (generator) {
+  const it = generator();
+
+  function go(result) {
+    if (result.done) {
+      return result.value;
+    }
+    return result.value.then((value) => {
+      return go(it.next(value));
+    }, (error) => {
+      return go(it.throw(error));
+    })
+  }
+
+  go(it.next());
+}
+
+run(g);
+```
+
+> 上面代码的 Generator 函数 g 之中，有一个异步操作 getFoo，它返回的就是一个 Promise 对象。函数 run 用来处理这个 Promise 对象，并调用下一个 next() 方法。
+
+### Promise.try()
+
+1，实际开发中，经常遇到一种情况，不知道或者不想区分函数 f 是同步函数还是异步操作，但是想用 Promise 来处理它。因为这样就可以不管 f 是否包含异步操作，都用 then() 方法指定下一步流程，用 catch() 方法处理 f 抛出的错误。一般会采用下面的写法。
+
+```js
+Promise.resolve().then(f);
+```
+
+> 上面的写法有一个缺陷，就是如果 f 是同步函数，那么它会在本轮事件循环的末尾执行。
+
+```js
+const f = () => console.log('now');
+Promise.resolve().then(f);
+console.log('next');
+// next => now
+```
+
+> 上面代码中，函数 f 是同步的，但是用 Promise 包装了以后，就变成异步执行了。
+
+2，使用 async 函数实现同步函数同步执行，异步函数异步执行。
+
+```js
+const f = () => console.log('first');
+(async () => f())();
+console.log('second'); 
+// first => second
+```
+
+> 上面代码中，第二行是一个立即执行的匿名函数，会立即执行里面的 async 函数，因此如果 f 是同步的，就会得到同步的结果，如果 f 是异步的，就可以用 then 指定下一步，就像下面的写法。
+
+```js
+(async () => f())().then(...);
+```
+
+> **注意**：async () => f() 会吃掉 f() 抛出的错我。所以，如果想要捕获错误，需要使用 promise.catch() 方法。
+
+```js
+(async () => f()()).then(...).catch(...);
+```
+
+3，使用 new Promise() 实现同步函数同步执行，异步函数异步执行。
+
+```js
+const f = () => console.lg('first');
+(() => new Promise(
+  resolve => resolve(f());
+))();
+console.log('second');
+// first => second
+```
+
+> 上面代码也是使用立即执行的匿名函数，执行 new Promise()。这种情况下，同步函数也是同步执行的。
+
+4，使用 [Promise.try()](https://github.com/tc39/proposal-promise-try) 方法实现同步函数同步执行，异步函数异步执行，代替前面上述的两种方式。
+
+```js
+const f = () => console.log('first');
+Promise.try(f);
+```
+
+5，由于 Promise.try() 为所有操作提供了统一的处理机制，所以如果想用 then() 方法管理流程，最好都用 Promise.try() 包装一下。这样有[许多好处](http://cryto.net/~joepie91/blog/2016/05/11/what-is-promise-try-and-why-does-it-matter/)，其中一点就是可以更好地管理异常。
+
+```js
+function getUserName(userId) {
+  return data.users.get({id: userId})
+  .then(function (user) {
+    return user.name;
+  })
+  .catch((err) => {
+    console.log(err);
+  })
+}
+```
+
+> 上述代码中，data.users.get({id: userId}) 返回一个 Promise 对象，如果抛出异步错误，可以使用 catch() 方法捕获，但是如果抛出地是同步错误（比如数据库连接错误，具体看实现方法），这时就不得不使用 `try...catch` 去捕获错误了。
+
+```js
+function getUserName(userId) {
+  try {
+    return data.users.get({ id: userId })
+      .then(function (user) {
+        return user.name;
+      })
+  } catch (err) {
+    throw new Error(err);
+  }
+}
+```
+
+> 上面地写法显得很笨拙，此时就可以统一地使用 `Promise.catch()` 来捕获所有同步和异步地错误。
+
+```js
+function getUserName(userId) {
+  return Promise.try(() => data.users.get({ id: userId }))
+    .then((userId) => {
+      return userId;
+    })
+    .catch((err) => {
+      throw new Error(err);
+    })
+}
+```
+
+**说明**：事实上，Promise.try() 就是模拟 try 代码块，就像 Promise.catch() 模拟的是 catch() 代码块。
+
+## 手写 Promise
+
+### 基础版 Promise
+
+1，首先看最简单的 Promise 使用方式。
+
+```js
+const p1 = new Promise((resolve, reject) => {
+  console.log('new promise');
+  resolve('success');
+})
+
+console.log('after new promise');
+
+const p2 = p1.then(data => {
+  console.log(data);
+  throw new Error('faild...');
+})
+
+const p3 = p2.then(data => {
+  console.log('success', data);
+}, err => {
+  cosole.log('faild', err);
+})
+
+// new promise => after new promise => success => failed Error: faild...
+```
+
+> 通过上面的代码，可以发现，我们在调用 Promise 时，会返回一个 Promise 对象。在构建 Promise 对象时，需要传入一个 `executor` 函数，Promise 的主要业务流程都在 executor 函数中执行。如果运行在 executor 函数中的业务执行成功了，则会调用 resolve 函数，否则就执行 reject 函数。需要注意的是：Promise 的状态不可逆，同时调用 resolve 函数和 reject 函数，默认会采用第一次调用的结果。
+
+2，Promise 的基本特征：
+
+<1>，Promise 有三个状态：pending、resolved、rejected.
+
+<2>，new Promise 时，需要传递一个 executor() 执行器，执行器立即执行。
+
+<3>，executor 接收两个参数，分别是 resolve 和 reject。
+
+<4>，Promsie 的默认状态是 pending。
+
+<5>，Promise 有一个 value 保存成功状态的值，可以是 undefined/thenable/promise。
+
+<6>，Promise 有一个 reason 保存失败状态的值。
+
+<7>，Promise 只能从 pending 到 resolved，或者从 pending 到 rejected。状态一旦确认，就不会再改变。
+
+<8>，Promise 必须有一个 then() 方法，then() 方法接收两个参数，分别是：Promise 成功的回调 onResolved 和 Promise 失败的回调 onRejected。
+
+<9>，如果调用 then() 时，Promise 已经成功，则执行 onResolved，参数是 Promise 的value。
+
+<10>，如果调用 then() 时，Promise 已经失败，那么执行 onRejected，参数是 Promise 的 reason。
+
+<11>，如果 then() 中抛出了异常，那么就会把这个异常作为参数，传递给下一个 then() 的失败的回调 onRejected。
+
+3，实现最基本的 Promise：
+
+```js
+const PENDING = 'PENDING';
+const RESOLVED = 'RESOLVED';
+const REJECTED = 'REJECTED';
+
+class Promise {
+  constructor(executor) {
+    // 默认状态为 PENDING
+    this.status = PENDING;
+    // 存放成功状态的值，默认为 undefined
+    this.value = undefined;
+    // 存放失败状态的值，默认为 undefined
+    this.reason = undefined;
+
+    // 调用此方发就表示成功
+    let resolve = (value) => {
+      /*状态为 PENDING 时才可以更新状态，
+      防止 executor 中调用两次 resolve/reject 方法*/
+      if (this.status === PENDING) {
+        this.status = RESOLVED;
+        this.value = value;
+      }
+    }
+
+    // 调用此方发就表示失败
+    let reject = (reason) => {
+      /*状态为 PENDING 时才可以更新状态，
+      防止 executor 中调用两次 resolve/reject 方法*/
+      if (this.status === PENDING) {
+        this.status = REJECTED;
+        this.reason = reason;
+      }
+    }
+
+    try {
+      // 立即执行，将 resolve 和 reject 函数传递给使用者
+      executor(resolve, reject);
+    } catch (error) {
+      // 发生异常时执行失败逻辑
+      reject(error);
+    }
+  }
+
+  // 包含一个 then 方法，并接收两个参数 onResolved、onRejected
+  then(onResolved, onRejected) {
+    if (this.status === RESOLVED) {
+      onResolved(this.value);
+    }
+    if (this.status === REJECTED) {
+      onRejected(this.reason);
+    }
+  }
+}
+
+console.log(new Promise(() => { }));
+
+// resolve/reject 就是从 Promise 类中 constructor 中执行executor()以实参的方式传递出来的
+const promise = new Promise((resolve, reject) => {
+  resolve('成功');
+}).then(data => {
+  console.log('success', data);
+}, error => {
+  console.log(error);
+})
+// success 成功
+```
+
+> 通过上述代码，我们已经实现了一个基础版的 Promise，其中只处理了同步操作的 promise。如果在 executor() 中传入一个异步操作，会有什么结果呢？我们可以试一下：
+
+```js
+const promise1 = new Promise((resolve, reject) => {
+  // 传入一个异步操作
+  setTimeout(() => {
+    resolve('成功');
+  }, 1000);
+}).then(
+  (data) => {
+    console.log('success', data)
+  },
+  (err) => {
+    console.log('faild', err)
+  }
+)
+// 没有任何输出
+```
+
+> 执行上述测试代码后发现，promise 没有任何返回，这是因为 Promise 调用 then() 方法时，当前的 Promise 并没有成功，一直处于 pending 状态。我们需要先将成功和失败的回调分别存放起来，在 executor() 异步任务被执行时，触发 resolve 或 reject，依次调用成功或失败的回调。
+
+4，优化之前处理同步的 promise 成能够处理异步情况的 Promise。
+
+```js
+const PENDING = 'PENDING';
+const RESOLVED = 'RESOLVED';
+const REJECTED = 'REJECTED';
+
+class asyncPromise {
+  constructor(executor) {
+    this.status = PENDING;
+    this.value = undefined;
+    this.reason = undefined;
+    // 存放成功的回调
+    this.onResolvedCallbacks = [];
+    // 存放失败的回调
+    this.onRejectedCallbacks = [];
+
+    let resolve = value => {
+      if (this.status === PENDING) {
+        this.status = RESOLVED;
+        this.value = value;
+        // 依次将对应的函数执行
+        this.onResolvedCallbacks.forEach(fn => {
+          // console.log(fn);  // () => {onResolved(this.value)}
+          fn()
+        });
+      }
+    }
+
+    let reject = reason => {
+      if (this.status === PENDING) {
+        this.status = RESOLVED;
+        this.reason = reason;
+        // 依次将对应的函数执行
+        this.onRejectedCallbacks.forEach(fn => fn());
+      }
+    }
+
+    try {
+      executor(resolve, reject);
+    } catch (error) {
+      reject(error);
+    }
+  }
+
+  then(onResolved, onRejected) {
+    if (this.status === RESOLVED) {
+      onResolved(this.value);
+    }
+
+    if (this.status === REJECTED) {
+      onRejected(this.reason);
+    }
+
+    if (this.status === PENDING) {
+      /* 如果 Promise 的状态是 pending，则说明是异步操作，
+      需要将 onResolved 和 onRejected 函数存放起来，
+      等待状态确定后，再依次将对应的函数执行 */
+      this.onResolvedCallbacks.push(() => {
+        onResolved(this.value);
+      })
+
+      this.onRejectedCallbacks.push(() => {
+        onRejected(this.reason);
+      })
+    }
+  }
+}
+
+// 测试
+const promise2 = new asyncPromise((resolve, reject) => {
+  setTimeout(() => {
+    resolve('异步成功');
+  }, 1000);
+}).then(data => {
+  console.log('async success', data);
+}, error => {
+  console.log('async faild', error);
+})
+// 输出为：async 异步成功
 ```
