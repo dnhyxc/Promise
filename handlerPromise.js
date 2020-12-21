@@ -153,4 +153,4 @@ const promise2 = new asyncPromise((resolve, reject) => {
 }, error => {
   console.log('async faild', error);
 })
-// 输出为：async 异步成功
+// 输出为：async success 异步成功

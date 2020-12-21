@@ -1290,3 +1290,31 @@ const promise2 = new asyncPromise((resolve, reject) => {
 })
 // 输出为：async 异步成功
 ```
+
+> 以上就完成处理异步的情况 Promise。熟悉设计模式的同学，应该意识到了这其实是一个`发布订阅模式`，这种收集依赖 -> 触发通知 -> 取出依赖执行的方式，被广泛运用于发布订阅模式的实现。
+
+### then 的链式调用 && 值穿透特性
+
+1，我们都知道，Promise 的优势在于可以链式调用。在我们使用 Promise 的时候，当 then() 函数中 return 了一个值，不管是什么值，我们都能在下一个 then() 中获取到，这就是所谓的 then() 链式调用。而且，当我们不在 then() 中放入参数，例如：promise.then().then()，那么其后面的 then() 依旧可以得到之前 then() 返回的值，这就是所谓的值穿透。那具体如何实现呢？`如果每次调用 then() 的时候，我们都重新创建一个 promise 对象，并把上一个 then() 的返回结果传给这个新的 Promise 的 then() 方法`，不就可以一直 then() 下去了吗？
+
+2，结合以上思路，我们可以得出以下结论：
+
+<1>，then() 的参数 onResolved 和 onRejected 可以缺省，如果 onResolved 或者 onRejected 不是函数，将其忽略，且依旧可以在下面的 then() 中获取到之前返回的值。
+
+<2>，Promise 可以 then() 多次，每次执行完 Promise.then() 方法后返回的都是一个新的 Promise。
+
+<3>，如果 then() 的返回值 x 是一个普通值，那么就会把这个结果作为参数，传递给下一个 then() 的成功的回调中。
+
+<4>，如果 then() 中抛出异常，那么久会把这个异常作为参数，传递给下一个 then() 的失败回调中。
+
+<5>，如果 then() 的返回值 x 是一个 Promise，那么会等这个 Promise 执行完，Promise 如果成功，就走下一个 then() 的成功回调 onResolved()，如果失败，就走下一个 then() 的失败回调 onRejected()。如果抛出异常，就走下一个 then() 的失败回调 onRejected()。
+
+<6>，如果 `then() 的返回值 x 和 Promise 是同一个引用对象，造成循环引用，则抛出异常`，把异常传递给下一个 then() 失败的回调中。
+
+<7>，如果 then() 的返回值 x 是一个 Promise，且 x 同时调用 resolve 函数和 reject 函数，则第一次调用优先，其它所有调用被忽略。
+
+3，综合上述内容，完成 Promise.then() 的链式调用。
+
+```js
+
+```
