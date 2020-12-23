@@ -1466,3 +1466,5 @@ const promise = new Promise((resolve, reject) => {
 });
 // err promise 失败了
 ```
+
+### Promise.resolve
